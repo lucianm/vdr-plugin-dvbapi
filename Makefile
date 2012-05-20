@@ -53,14 +53,6 @@ DEFINES += -D_GNU_SOURCE -DPLUGIN_NAME_I18N='"$(PLUGIN)"'
 
 OBJS = CAPMT.o DeCSA.o DeCsaTSBuffer.o dll.o DVBAPI.o DVBAPISetup.o SCDeviceProbe.o simplelist.o device.o deviceplugin.o UDPSocket.o SCCIAdapter.o Frame.o SCCAMSlot.o
 
-# FFdeCSA
-CPUOPT     ?= athlon64
-PARALLEL   ?= PARALLEL_128_SSE
-CSAFLAGS   ?= -fPIC -O3 -fexpensive-optimizations -funroll-loops -mmmx -msse -msse2 -msse3
-FFDECSADIR  = FFdecsa
-FFDECSA     = $(FFDECSADIR)/FFdecsa.o
-FFDECSATEST = $(FFDECSADIR)/FFdecsa_test.done
-
 HAVE_SD := $(wildcard ../dvbsddevice/dvbsddevice.c)
 ifneq ($(strip $(HAVE_SD)),)
   DEFINES += -DWITH_SDDVB
@@ -83,8 +75,8 @@ all: libvdr-$(PLUGIN).so
 
 ### Targets:
 
-libvdr-$(PLUGIN).so: $(OBJS) $(FFDECSA) $(DEVPLUGTARGETS)
-	$(CXX) $(CXXFLAGS) -shared $(OBJS) $(FFDECSA) -o $@
+libvdr-$(PLUGIN).so: $(OBJS) $(DEVPLUGTARGETS)
+	$(CXX) $(CXXFLAGS) -shared $(OBJS) -ldvbcsa -o $@
 	@cp --remove-destination $@ $(LIBDIR)/$@.$(APIVERSION)
 
 libdvbapi-dvbsddevice.so: device-sd.o
@@ -97,9 +89,6 @@ libdvbapi-dvbhddevice.so: device-hd.o
 $(LIBDIR)/libdvbapi-dvbhddevice.so.$(APIVERSION): libdvbapi-dvbhddevice.so
 	@cp -p $< $@
 
-$(FFDECSA): $(FFDECSADIR)/*.c $(FFDECSADIR)/*.h
-	@$(MAKE) COMPILER="$(CXX)" FLAGS="$(CSAFLAGS) -march=$(CPUOPT)" PARALLEL_MODE=$(PARALLEL) -C $(FFDECSADIR) all
-
 dist: clean
 	@-rm -rf $(TMPDIR)/$(ARCHIVE)
 	@mkdir $(TMPDIR)/$(ARCHIVE)
@@ -111,4 +100,3 @@ dist: clean
 clean:
 	@-rm -f $(PODIR)/*.mo $(PODIR)/*.pot
 	@-rm -f $(OBJS) device-sd.o device-hd.o $(DEPFILE) *.so *.tgz core* *~ $(PODIR)/*.mo $(PODIR)/*.pot
-	@$(MAKE) -C $(FFDECSADIR) clean

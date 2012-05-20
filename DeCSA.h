@@ -22,6 +22,8 @@
 #include <linux/dvb/ca.h>
 #include <vdr/dvbdevice.h>
 #include <vdr/thread.h>
+//#include <dvbcsa/dvbcsa.h>	// we can't currently use it because there are no extern "C" and function names are mangled, which leads to unresolved symbols
+#include "dvbcsa.h"
 
 #define MAX_CSA_PIDS 8192
 #define MAX_CSA_IDX  16
@@ -38,9 +40,11 @@ class DeCSA
 {
 private:
   int cs;
-  unsigned char **range, *lastData;
+  struct dvbcsa_bs_batch_s *cs_tsbbatch_even;
+  struct dvbcsa_bs_batch_s *cs_tsbbatch_odd;
   unsigned char pidmap[MAX_CSA_PIDS];
-  void *keys[MAX_CSA_IDX];
+  struct dvbcsa_bs_key_s *cs_key_even[MAX_CSA_IDX];
+  struct dvbcsa_bs_key_s *cs_key_odd[MAX_CSA_IDX];
   unsigned int even_odd[MAX_CSA_IDX], flags[MAX_CSA_IDX];
   cMutex mutex;
   cCondVar wait;
