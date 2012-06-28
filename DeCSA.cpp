@@ -132,6 +132,34 @@ bool DeCSA::SetCaPid(ca_pid_t *ca_pid)
   return true;
 }
 
+unsigned char ts_packet_get_payload_offset(unsigned char *ts_packet)
+{
+  if (ts_packet[0] != TS_SYNC_BYTE)
+    return 0;
+
+  unsigned char adapt_field   = (ts_packet[3] &~ 0xDF) >> 5; // 11x11111
+  unsigned char payload_field = (ts_packet[3] &~ 0xEF) >> 4; // 111x1111
+
+  if (!adapt_field && !payload_field)     // Not allowed
+    return 0;
+
+  if (adapt_field)
+  {
+    unsigned char adapt_len = ts_packet[4];
+    if (payload_field && adapt_len > 182) // Validity checks
+      return 0;
+    if (!payload_field && adapt_len > 183)
+      return 0;
+    if (adapt_len + 4 > TS_SIZE)  // adaptation field takes the whole packet
+      return 0;
+    return 4 + 1 + adapt_len;     // ts header + adapt_field_len_byte + adapt_field_len
+  }
+  else
+  {
+    return 4; // No adaptation, data starts directly after TS header
+  }
+}
+
 bool DeCSA::Decrypt(unsigned char *data, int len, bool force)
 {
   cMutexLock lock(&mutex);
@@ -142,7 +170,7 @@ bool DeCSA::Decrypt(unsigned char *data, int len, bool force)
   }
 
   int ccs = 0, currIdx = -1;
-  int payload_len, offset, n;
+  int payload_len, offset;
   int cs_fill_even = 0;
   int cs_fill_odd = 0;
 
@@ -158,22 +186,8 @@ bool DeCSA::Decrypt(unsigned char *data, int len, bool force)
     unsigned int ev_od = data[l + 3] & 0xC0;
     if (ev_od == 0x80 || ev_od == 0xC0)
     {                           // encrypted
-
-      if (data[l + 3] & 0x20)
-      {                         // incomplete packet
-        offset = 4 + data[l + 4] + 1;
-        payload_len = TS_SIZE - offset;
-        n = payload_len >> 3;
-        if (n == 0)
-        {                       // decrypted==encrypted!
-          break;                // this doesn't need more processing
-        }
-      }
-      else
-      {
-        offset = 4;
-        payload_len = TS_SIZE - offset;
-      };
+      offset = ts_packet_get_payload_offset(data + l);
+      payload_len = TS_SIZE - offset;
 
       int idx = pidmap[((data[l + 1] << 8) + data[l + 2]) & (MAX_CSA_PIDS - 1)];
       if (currIdx < 0 || idx == currIdx)
