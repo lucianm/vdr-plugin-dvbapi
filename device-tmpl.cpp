@@ -27,11 +27,11 @@ private:
   DeCsaTsBuffer *tsBuffer;
   cMutex tsMutex;
   cScDevicePlugin *devplugin;
+  cCiAdapter *hwciadapter;
   cTimeMs lastDump;
   SCCIAdapter *sCCIAdapter;
   int fd_dvr, fd_ca, fd_ca2;
-  cMutex cafdMutex;
-  bool softcsa;
+  bool softcsa, fullts;
   char devId[8];
   bool ScActive(void);
 
@@ -49,6 +49,7 @@ public:
   virtual bool HasCi(void);
   void LateInit(void);
   void EarlyShutdown(void);
+  bool CheckFullTs(void);
 };
 
 SCDEVICE::SCDEVICE(cScDevicePlugin *DevPlugin, int Adapter, int Frontend, int cafd)
@@ -60,13 +61,13 @@ SCDEVICE::SCDEVICE(cScDevicePlugin *DevPlugin, int Adapter, int Frontend, int ca
 {
   DEBUGLOG("%s: adapter=%d frontend=%d", __FUNCTION__, Adapter, Frontend);
   tsBuffer = 0;
+  hwciadapter = 0;
   devplugin = DevPlugin;
-  softcsa = false;
+  softcsa = fullts = false;
   fd_ca = cafd;
   fd_ca2 = dup(fd_ca);
   fd_dvr = -1;
   snprintf(devId, sizeof(devId), "%d/%d", Adapter, Frontend);
-  sCCIAdapter = new SCCIAdapter(this, Adapter);
   DEBUGLOG("%s: done", __FUNCTION__);
 }
 
@@ -89,7 +90,16 @@ void SCDEVICE::EarlyShutdown(void)
   if (sCCIAdapter)
     delete sCCIAdapter;
   sCCIAdapter = 0;
+  delete hwciadapter;
+  hwciadapter = 0;
 }
+
+#ifndef OWN_FULLTS
+bool SCDEVICE::CheckFullTs(void)
+{
+  return false;
+}
+#endif //!OWN_FULLTS
 
 void SCDEVICE::LateInit(void)
 {
@@ -110,19 +120,27 @@ void SCDEVICE::LateInit(void)
   }
   if (softcsa)
   {
-    INFOLOG("Using software decryption on card %s", devId);
+    fullts = CheckFullTs();
+    if (fullts)
+      INFOLOG("Enabling hybrid full-ts mode on card %s", devId);
+    else
+      INFOLOG("Using software decryption on card %s", devId);
   }
+  if (fd_ca2 >= 0)
+    hwciadapter = cDvbCiAdapter::CreateCiAdapter(this, fd_ca2);
+  sCCIAdapter = new SCCIAdapter(this, n, fd_ca, softcsa, fullts);
 }
 
 bool SCDEVICE::HasCi(void)
 {
   DEBUGLOG("%s", __FUNCTION__);
-  return sCCIAdapter;
+  return sCCIAdapter || hwciadapter;
 }
 
 bool SCDEVICE::Ready(void)
 {
-  return (sCCIAdapter ? sCCIAdapter->Ready() : true);
+  return (sCCIAdapter ? sCCIAdapter->Ready() : true) &&
+         (hwciadapter ? hwciadapter->Ready() : true);
 }
 
 bool SCDEVICE::SetPid(cPidHandle *Handle, int Type, bool On)
@@ -139,7 +157,7 @@ bool SCDEVICE::SetChannelDevice(const cChannel *Channel, bool LiveView)
 {
   DEBUGLOG("%s", __FUNCTION__);
   bool ret = DVBDEVICE::SetChannelDevice(Channel, LiveView);
-  if (LiveView && IsPrimaryDevice() && Channel->Ca() >= CA_ENCRYPTED_MIN && !Transferring() && softcsa)
+  if (LiveView && IsPrimaryDevice() && Channel->Ca() >= CA_ENCRYPTED_MIN && !Transferring() && softcsa && !fullts)
   {
     INFOLOG("Forcing transfermode on card %s", devId);
     DVBDEVICE::SetChannelDevice(Channel, false); // force transfermode
@@ -160,8 +178,9 @@ bool SCDEVICE::OpenDvr(void)
   fd_dvr = cScDevices::DvbOpen(DEV_DVB_DVR, DVB_DEV_SPEC, O_RDONLY | O_NONBLOCK, true);
   if (fd_dvr >= 0)
   {
+    DeCSA *decsa = sCCIAdapter ? sCCIAdapter->GetDeCSA() : 0;
     tsMutex.Lock();
-    tsBuffer = new DeCsaTsBuffer(fd_dvr, MEGABYTE(4), CardIndex() + 1, sCCIAdapter->GetDeCSA(), ScActive());
+    tsBuffer = new DeCsaTsBuffer(fd_dvr, MEGABYTE(DeCsaTsBuffSize), CardIndex() + 1, decsa, ScActive());
     tsMutex.Unlock();
   }
   return fd_dvr >= 0;
@@ -193,4 +212,5 @@ bool SCDEVICE::GetTSPacket(uchar *&Data)
 
 #undef SCDEVICE
 #undef DVBDEVICE
+#undef OWN_FULLTS
 #undef OWN_DEVPARAMS

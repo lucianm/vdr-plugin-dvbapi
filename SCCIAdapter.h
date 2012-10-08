@@ -47,13 +47,16 @@ private:
   DeCSA *decsa;
   CAPMT *capmt;
   cDevice *device;
+  bool softcsa, fullts;
   bool initialCaDscr;
   unsigned short caids[1024];
   int caidsLength;
   int cardIndex;
   cMutex ciMutex;
+  cMutex cafdMutex;
   SCCAMSlot *slots[MAX_CI_SLOTS];
   int version[MAX_CI_SLOTS];
+  int fd_ca;
   cTimeMs caidTimer, triggerTimer;
   int tcid;
   cTimeMs readTimer, writeTimer;
@@ -64,7 +67,7 @@ private:
   int addCaid(int offset, int limit, unsigned short caid);
 
 public:
-  SCCIAdapter(cDevice *Device, int CardIndex);
+  SCCIAdapter(cDevice *Device, int CardIndex, int cafd, bool SoftCSA, bool FullTS);
   ~SCCIAdapter();
   int Adapter()
   {

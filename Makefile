@@ -63,6 +63,11 @@ ifneq ($(strip $(HAVE_HD)),)
   DEFINES += -DWITH_HDDVB
   DEVPLUGTARGETS += $(LIBDIR)/libdvbapi-dvbhddevice.so.$(APIVERSION)
 endif
+HAVE_UFS9XX := $(wildcard ../dvbufs9xx/dvbhddevice.c)
+ifneq ($(strip $(HAVE_UFS9XX)),)
+  DEFINES += -DWITH_UFS9XX
+  DEVPLUGTARGETS += $(LIBDIR)/libdvbapi-dvbufs9xxdevice.so.$(APIVERSION)
+endif
 
 ### The main target:
 
@@ -89,6 +94,11 @@ libdvbapi-dvbhddevice.so: device-hd.o
 $(LIBDIR)/libdvbapi-dvbhddevice.so.$(APIVERSION): libdvbapi-dvbhddevice.so
 	@cp -p $< $@
 
+libdvbapi-dvbufs9xxdevice.so: device-ufs9xx.o
+	$(CXX) $(CXXFLAGS) -shared $< $(SHAREDLIBS) -o $@
+$(LIBDIR)/libdvbapi-dvbufs9xxdevice.so.$(APIVERSION): libdvbapi-dvbufs9xxdevice.so
+	@cp -p $< $@
+
 dist: clean
 	@-rm -rf $(TMPDIR)/$(ARCHIVE)
 	@mkdir $(TMPDIR)/$(ARCHIVE)
@@ -99,4 +109,4 @@ dist: clean
 
 clean:
 	@-rm -f $(PODIR)/*.mo $(PODIR)/*.pot
-	@-rm -f $(OBJS) device-sd.o device-hd.o $(DEPFILE) *.so *.tgz core* *~ $(PODIR)/*.mo $(PODIR)/*.pot
+	@-rm -f $(OBJS) device-sd.o device-hd.o device-ufs9xx.o $(DEPFILE) *.so *.tgz core* *~ $(PODIR)/*.mo $(PODIR)/*.pot
